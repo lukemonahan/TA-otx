@@ -77,6 +77,8 @@ class OTXModularInput(ModularInput):
 		host = cleaned_params.get("host", None)
 		source = stanza
 
+                run_time = time.time()
+
 		otx = OTXv2(api_key)
 
 		if self.needs_another_run(input_config.checkpoint_dir, stanza, interval):
@@ -110,8 +112,7 @@ class OTXModularInput(ModularInput):
 					indicator['pulse_id'] = pulse['id']
 					self.output_event(indicator, stanza, index=index, source=source, sourcetype="otx:indicator", host=host, unbroken=False, close=True)
 
-			self.save_checkpoint_data(input_config.checkpoint_dir, stanza,  { 'last_ran': self.get_non_deviated_last_run(last_ran
-				, interval, stanza) })
+			self.save_checkpoint_data(input_config.checkpoint_dir, stanza,  { 'last_ran': run_time })
 
 
 if __name__ == '__main__':
