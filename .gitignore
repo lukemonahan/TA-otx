@@ -1,1 +1,3 @@
 *.pyc
+local/*
+metadata/local.meta
