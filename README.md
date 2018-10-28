@@ -20,3 +20,5 @@ At this point you should soon be able to see OTX data by searching:
 `index=otx sourcetype=otx:pulse`
 
 `index=otx sourcetype=otx:indicator`
+
+The otx:indicator events contain a `pulse_id`, which link it to the `id` of a corresponding `otx:pulse`.
