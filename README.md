@@ -1,5 +1,5 @@
-TA-otx
-------
+Add-on for Open Threat Exchange
+-------------------------------
 
 Get Open Threat Exchange data into Splunk.
 
@@ -18,6 +18,7 @@ To use this add-on:
 At this point you should soon be able to see OTX data by searching:
 
 `index=otx sourcetype=otx:pulse`
+
 `index=otx sourcetype=otx:indicator`
 
 
