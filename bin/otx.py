@@ -24,8 +24,9 @@ class OTXModularInput(ModularInput):
 		args = [
 				Field("api_key", "API key", "Your Open Threat Exchange API key", empty_allowed=False),
 				IntegerField("backfill_days", "Backfill days", "The number of days to backfill Pulses for on first run", empty_allowed=False),
-				DurationField("interval", "Interval", "The interval defining how often to check for updated Pulses; can include time units (e.g. 15m for 15 minutes, 8h for 8 hours)", empty_allowed=False)
-				]
+				DurationField("interval", "Interval", "The interval defining how often to check for updated Pulses; can include time units (e.g. 15m for 15 minutes, 8h for 8 hours)", empty_allowed=False),
+				Field("proxy", "HTTP proxy", "A HTTP proxy to use when fetching from the OTX API")
+		]
 
 		ModularInput.__init__( self, scheme_args, args, logger_name='otx' )
 
@@ -35,16 +36,16 @@ class OTXModularInput(ModularInput):
 		# Make the event
 		event_dict = {'stanza': stanza,
 					  'data' : data_str}
-		
+
 		if index is not None:
 			event_dict['index'] = index
-			
+
 		if sourcetype is not None:
 			event_dict['sourcetype'] = sourcetype
-			
+
 		if source is not None:
 			event_dict['source'] = source
-			
+
 		if host is not None:
 			event_dict['host'] = host
 
@@ -57,13 +58,13 @@ class OTXModularInput(ModularInput):
 		xtime_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
 		event_dict['time'] = time.mktime(xtime_parsed.timetuple())
 
-		event = self._create_event(self.document, 
+		event = self._create_event(self.document,
 								   params=event_dict,
 								   stanza=stanza,
 								   unbroken=unbroken,
 								   close=close)
-		
-		# If using unbroken events, the last event must have been 
+
+		# If using unbroken events, the last event must have been
 		# added with a "</done>" tag.
 		return self._print_event(self.document, event)
 
@@ -75,11 +76,12 @@ class OTXModularInput(ModularInput):
 		backfill_days = cleaned_params["backfill_days"]
 		index = cleaned_params.get("index", "default")
 		host = cleaned_params.get("host", None)
+		proxy = cleaned_params.get("proxy", None)
 		source = stanza
 
                 run_time = time.time()
 
-		otx = OTXv2(api_key)
+		otx = OTXv2(api_key, proxy)
 
 		if self.needs_another_run(input_config.checkpoint_dir, stanza, interval):
 

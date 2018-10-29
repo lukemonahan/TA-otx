@@ -9,3 +9,6 @@ interval = <value>
 
 backfill_days = <value>
 * How many days to backfill for when running for the first time
+
+proxy = <string>
+* (Optional) HTTP proxy to use when fetching data
