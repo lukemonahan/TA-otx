@@ -25,7 +25,7 @@ class OTXModularInput(ModularInput):
 				Field("api_key", "API key", "Your Open Threat Exchange API key", empty_allowed=False),
 				IntegerField("backfill_days", "Backfill days", "The number of days to backfill Pulses for on first run", empty_allowed=False),
 				DurationField("interval", "Interval", "The interval defining how often to check for updated Pulses; can include time units (e.g. 15m for 15 minutes, 8h for 8 hours)", empty_allowed=False),
-				Field("proxy", "HTTP proxy", "A HTTP proxy to use when fetching from the OTX API")
+				Field("proxy", "HTTP proxy", "A HTTP proxy to use when fetching from the OTX API", empty_allowed=True, none_allowed=True, required_on_create=False, required_on_edit=False)
 		]
 
 		ModularInput.__init__( self, scheme_args, args, logger_name='otx' )
