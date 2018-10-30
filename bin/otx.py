@@ -1,97 +1,69 @@
 import sys
 import os
 import time
-from datetime import datetime, timedelta
 import json
-
-from modular_input import ModularInput, DurationField, IntegerField, Field
+import hashlib
+from datetime import datetime, timedelta
+from splunklib.modularinput import *
 
 # Import our own libraries, and prefer them to Splunk's older versions
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/lib/")
-
 from OTXv2.OTXv2 import OTXv2
 
-class OTXModularInput(ModularInput):
+class OTXModularInput(Script):
 
-	def __init__(self):
+	def get_scheme(self):
+		scheme = Scheme("Open Threat Exchange")
+		scheme.description = "Retrieve Pulses from OTX"
+		scheme.use_external_validation = False
+		scheme.use_single_instance = False
 
-		scheme_args = {'title': "Open Threat Exchange",
-					   'description': "Retrieve Pulses from OTX",
-					   'use_external_validation': "true",
-					   'streaming_mode': "xml",
-					   'use_single_instance': "true"}
+		api_key = Argument("api_key")
+		api_key.data_type = Argument.data_type_string
+		api_key.title = "API key"
+		api_key.description = "Your Open Threat Exchange API key"
+		api_key.required_on_create = True
+		api_key.required_on_edit = True
+		scheme.add_argument(api_key)
 
-		args = [
-				Field("api_key", "API key", "Your Open Threat Exchange API key", empty_allowed=False),
-				IntegerField("backfill_days", "Backfill days", "The number of days to backfill Pulses for on first run", empty_allowed=False),
-				DurationField("interval", "Interval", "The interval defining how often to check for updated Pulses; can include time units (e.g. 15m for 15 minutes, 8h for 8 hours)", empty_allowed=False),
-				Field("proxy", "HTTP proxy", "A HTTP proxy to use when fetching from the OTX API", empty_allowed=True, none_allowed=True, required_on_create=False, required_on_edit=False)
-		]
+		backfill_days = Argument("backfill_days")
+		backfill_days.data_type = Argument.data_type_number
+		backfill_days.title = "Backfill days"
+		backfill_days.description = "The number of days to backfill Pulses for on first run"
+		backfill_days.required_on_create = True
+		backfill_days.required_on_edit = True
+		scheme.add_argument(backfill_days)
 
-		ModularInput.__init__( self, scheme_args, args, logger_name='otx' )
+		proxy = Argument("proxy")
+		proxy.data_type = Argument.data_type_string
+		proxy.title = "HTTP Proxy"
+		proxy.description = "A HTTP proxy URL if it is required"
+		proxy.required_on_create = False
+		proxy.required_on_edit = False
+		scheme.add_argument(proxy)
 
-	def create_event_string(self, data_dict, stanza, sourcetype, source, index, host=None, unbroken=False, close=False, encapsulate_value_in_double_spaces=False):
-		data_str = json.dumps(data_dict)
+		return scheme
 
-		# Make the event
-		event_dict = {'stanza': stanza,
-					  'data' : data_str}
+	def stream_events(self, inputs, ew):
+		for input_name, input_item in inputs.inputs.iteritems():
 
-		if index is not None:
-			event_dict['index'] = index
+			api_key = str(input_item["api_key"])
+			backfill_days = int(input_item["backfill_days"])
+			if "proxy" in input_item:
+				proxy = str(input_item["proxy"])
+			else:
+				proxy = ""
+			index = str(input_item["index"])
+			host = str(input_item["host"])
+			run_time = time.time()
 
-		if sourcetype is not None:
-			event_dict['sourcetype'] = sourcetype
+			otx = OTXv2(api_key, proxy)
 
-		if source is not None:
-			event_dict['source'] = source
+			ew.log(ew.INFO, "Beginning poll of OTX with API key: %s" % api_key)
 
-		if host is not None:
-			event_dict['host'] = host
-
-		if 'modified' in data_dict:
-			xtime = data_dict['modified']
-		elif 'created' in data_dict:
-			xtime = data_dict['created']
-
-		timeparts = xtime.split('.')
-		xtime_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
-		event_dict['time'] = time.mktime(xtime_parsed.timetuple())
-
-		event = self._create_event(self.document,
-								   params=event_dict,
-								   stanza=stanza,
-								   unbroken=unbroken,
-								   close=close)
-
-		# If using unbroken events, the last event must have been
-		# added with a "</done>" tag.
-		return self._print_event(self.document, event)
-
-
-	def run(self, stanza, cleaned_params, input_config):
-
-		interval = cleaned_params["interval"]
-		api_key = cleaned_params["api_key"]
-		backfill_days = cleaned_params["backfill_days"]
-		index = cleaned_params.get("index", "default")
-		host = cleaned_params.get("host", None)
-		proxy = cleaned_params.get("proxy", None)
-		source = stanza
-
-                run_time = time.time()
-
-		otx = OTXv2(api_key, proxy)
-
-		if self.needs_another_run(input_config.checkpoint_dir, stanza, interval):
-
-			# Get the date of the latest pulse imported
 			try:
-				checkpoint_data = self.get_checkpoint_data(input_config.checkpoint_dir, stanza, throw_errors=True)
+				checkpoint_data = self.get_checkpoint_data(inputs.metadata["checkpoint_dir"], input_name)
 			except IOError:
-				checkpoint_data = None
-			except ValueError:
-				self.logger.exception("Exception generated when attempting to load the checkpoint data")
 				checkpoint_data = None
 
 			# Try to load the last ran date from the checkpoint data
@@ -105,27 +77,85 @@ class OTXModularInput(ModularInput):
 		 	else:
 		 		since = datetime.now() - timedelta(days = backfill_days)
 
+			ew.log(ew.INFO, "Retrieving subscribed pulses since: %s" % str(since))
+
 			pulses = otx.getall(modified_since=since, iter=True)
 
+
+			pulse_count = 0
+			indicator_count = 0
 			for pulse in pulses:
 				indicators = pulse.pop('indicators', None)
-				self.output_event(pulse, stanza, index=index, source=source, sourcetype="otx:pulse", host=host, unbroken=False, close=True)
+
+				timeparts = pulse['modified'].split('.')
+				time_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
+				xtime = time.mktime(time_parsed.timetuple())
+
+				e = Event(
+					data = json.dumps(pulse),
+					stanza = input_name,
+					time = xtime,
+					host = host,
+					index = index,
+					source = input_name,
+					sourcetype = "otx:pulse",
+					done = True
+				)
+
+				ew.write_event(e)
+
+				pulse_count = pulse_count + 1
+
 				for indicator in indicators:
 					indicator['pulse_id'] = pulse['id']
-					self.output_event(indicator, stanza, index=index, source=source, sourcetype="otx:indicator", host=host, unbroken=False, close=True)
 
-			self.save_checkpoint_data(input_config.checkpoint_dir, stanza,  { 'last_ran': run_time })
+					timeparts = indicator['created'].split('.')
+					time_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
+					xtime = time.mktime(time_parsed.timetuple())
+
+					e = Event(
+						data = json.dumps(indicator),
+						stanza = input_name,
+						time = xtime,
+						host = host,
+						index = index,
+						source = input_name,
+						sourcetype = "otx:indicator",
+						done = True
+					)
+
+					ew.write_event(e)
+
+					indicator_count = indicator_count + 1
+
+			self.save_checkpoint_data(inputs.metadata["checkpoint_dir"], input_name,  { 'last_ran': run_time })
+
+			ew.log(ew.INFO, "Completed polling. Logged %d pulses and %d indicators." % (pulse_count, indicator_count))
+
+	def get_checkpoint_data(self, checkpoint_dir, stanza="(undefined)"):
+	    fp = None
+
+	    try:
+	        fp = open(self.get_file_path(checkpoint_dir, stanza) )
+	        checkpoint_dict = json.load(fp)
+	        return checkpoint_dict
+	    finally:
+	        if fp is not None:
+	            fp.close()
+
+	def save_checkpoint_data(self, checkpoint_dir, stanza, data):
+	    fp = None
+
+	    try:
+	        fp = open(self.get_file_path(checkpoint_dir, stanza), 'w' )
+	        json.dump(data, fp)
+	    finally:
+	        if fp is not None:
+	            fp.close()
+
+	def get_file_path(self, checkpoint_dir, stanza):
+		return os.path.join( checkpoint_dir, hashlib.sha224(stanza).hexdigest() + ".json" )
 
 
-if __name__ == '__main__':
-	try:
-		otx_input = OTXModularInput()
-		otx_input.execute()
-		sys.exit(0)
-	except Exception as exception:
-
-		# This logs general exceptions that would have been unhandled otherwise (such as coding errors)
-		if otx_input is not None:
-			otx_input.logger.exception("Unhandled exception was caught, this may be due to a defect in the script")
-
-		raise exception
+if __name__ == "__main__":
+	sys.exit(OTXModularInput().run(sys.argv))

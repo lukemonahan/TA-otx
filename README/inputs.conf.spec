@@ -1,4 +1,4 @@
-[otx://default]
+[otx://<stanza>]
 * Configure and input for importing Pulses from Open Threat Exchange
 
 api_key = <value>
