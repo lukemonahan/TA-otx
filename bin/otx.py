@@ -3,6 +3,7 @@ import os
 import time
 import json
 import hashlib
+import calendar
 from datetime import datetime, timedelta
 from splunklib.modularinput import *
 
@@ -73,14 +74,13 @@ class OTXModularInput(Script):
 				last_ran = None
 
 		 	if last_ran is not None:
-		 		since = datetime.fromtimestamp(last_ran)
+		 		since = datetime.utcfromtimestamp(last_ran)
 		 	else:
 		 		since = datetime.now() - timedelta(days = backfill_days)
 
 			ew.log(ew.INFO, "Retrieving subscribed pulses since: %s" % str(since))
 
-			pulses = otx.getall(modified_since=since, iter=True)
-
+			pulses = otx.getall(modified_since=since.isoformat(), iter=True)
 
 			pulse_count = 0
 			indicator_count = 0
@@ -88,7 +88,7 @@ class OTXModularInput(Script):
 				indicators = pulse.pop('indicators', None)
 
 				timeparts = pulse['modified'].split('.')
-				time_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
+				time_parsed = self.utc_to_local(datetime.strptime(timeparts[0], "%Y-%m-%dT%H:%M:%S"))
 				xtime = time.mktime(time_parsed.timetuple())
 
 				e = Event(
@@ -110,7 +110,7 @@ class OTXModularInput(Script):
 					indicator['pulse_id'] = pulse['id']
 
 					timeparts = indicator['created'].split('.')
-					time_parsed = datetime.strptime(timeparts[0] + " GMT", "%Y-%m-%dT%H:%M:%S %Z")
+					time_parsed = self.utc_to_local(datetime.strptime(timeparts[0], "%Y-%m-%dT%H:%M:%S"))
 					xtime = time.mktime(time_parsed.timetuple())
 
 					e = Event(
@@ -131,6 +131,12 @@ class OTXModularInput(Script):
 			self.save_checkpoint_data(inputs.metadata["checkpoint_dir"], input_name,  { 'last_ran': run_time })
 
 			ew.log(ew.INFO, "Completed polling. Logged %d pulses and %d indicators." % (pulse_count, indicator_count))
+
+	def utc_to_local(self, utc_dt):
+	    timestamp = calendar.timegm(utc_dt.timetuple())
+	    local_dt = datetime.fromtimestamp(timestamp)
+	    assert utc_dt.resolution >= timedelta(microseconds=1)
+	    return local_dt.replace(microsecond=utc_dt.microsecond)
 
 	def get_checkpoint_data(self, checkpoint_dir, stanza="(undefined)"):
 	    fp = None
