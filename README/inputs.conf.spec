@@ -1,14 +1,3 @@
-[otx://<stanza>]
-* Configure and input for importing Pulses from Open Threat Exchange
-
-api_key = <value>
-* Your OTX API key
-
-interval = <value>
-* How often to check for new Pulses
-
-backfill_days = <value>
-* How many days to backfill for when running for the first time
-
-proxy = <string>
-* (Optional) HTTP proxy to use when fetching data
+[otx://<name>]
+api_key = 
+backfill_days = Number of days to backfill pulses and indicators for the first time the input runs
