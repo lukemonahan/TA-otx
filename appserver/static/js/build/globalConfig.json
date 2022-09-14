@@ -1,10 +1,10 @@
 {
     "meta": {
         "name": "TA-otx",
-        "displayName": "TA-otx",
+        "displayName": "Add-on for Open Threat Exchange",
         "version": "1.0.0",
-        "apiVersion": "3.0.0",
-        "restRoot": "TA_otx"
+        "restRoot": "TA_otx",
+        "schemaVersion": "0.0.3"
     },
     "pages": {
         "configuration": {
@@ -247,8 +247,8 @@
                             "defaultValue": "default",
                             "options": {
                                 "endpointUrl": "data/indexes",
-                                "blackList": "^_.*$",
-                                "createSearchChoice": true
+                                "createSearchChoice": true,
+                                "denyList": "^_.*$"
                             },
                             "required": true,
                             "validators": [
